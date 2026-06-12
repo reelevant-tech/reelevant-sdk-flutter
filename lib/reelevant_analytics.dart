@@ -6,6 +6,9 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'reelevant_analytics_platform_interface.dart';
+import 'reelevant_client.dart';
+
+export 'reelevant_client.dart';
 
 /// Event define an analytics events compatible with Reelevant Events datsources.
 class Event {
@@ -81,11 +84,27 @@ class ReelevantAnalytics {
   String? currentUrl, userAgent;
   http.Client client = http.Client();
 
+  /// Runner endpoint URL for personalization (default: production runner).
+  String runnerUrl;
+
+  /// Global timeout for runner calls (default: 5s).
+  Duration runnerTimeout;
+
+  /// Fallback strategy when a runner call fails.
+  FallbackStrategy fallback;
+
+  /// Custom fallback handler (used when [fallback] is not `empty` or `error`).
+  FallbackHandler? fallbackHandler;
+
   ReelevantAnalytics(
       {required this.companyId,
       required this.datasourceId,
       this.endpoint = '',
-      this.retry = 60}) {
+      this.retry = 60,
+      this.runnerUrl = defaultRunnerUrl,
+      this.runnerTimeout = defaultTimeout,
+      this.fallback = FallbackStrategy.empty,
+      this.fallbackHandler}) {
     if (endpoint == '') {
       endpoint = 'https://collector.reelevant.com/collect/$datasourceId/rlvt';
     }
@@ -233,6 +252,73 @@ class ReelevantAnalytics {
   /// ```
   void setCurrentURL(String url) {
     currentUrl = url;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Personalization API
+  // ---------------------------------------------------------------------------
+
+  /// Execute a single workflow run.
+  /// Returns a typed [RunResult] with a discriminated `body`.
+  /// userId is auto-resolved from stored identity ([setUser] / tmpId) unless overridden in [options].
+  ///
+  /// ### Example
+  ///
+  /// ```dart
+  /// final result = await rlvt.run(RunOptions(
+  ///   workflowId: 'wf-hero',
+  ///   entrypoint: '43a490a0',
+  /// ));
+  /// if (result.body is JsonRunContent) {
+  ///   renderCard((result.body as JsonRunContent).content);
+  /// }
+  /// ```
+  Future<RunResult> run(RunOptions options) async {
+    try {
+      final effectiveUserId = options.userId ?? await _resolveUserId();
+      return await executeRunnerCall(
+        options: options,
+        runnerUrl: runnerUrl,
+        timeout: runnerTimeout,
+        userId: effectiveUserId,
+        client: client,
+      );
+    } catch (e) {
+      return _handleRunError(options, e);
+    }
+  }
+
+  /// Execute multiple workflow runs in parallel.
+  /// Returns results in the same order as the input options.
+  Future<List<RunResult>> runAll(List<RunOptions> optionsList) async {
+    return Future.wait(optionsList.map((opts) => run(opts)));
+  }
+
+  Future<String> _resolveUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('userId') ??
+        prefs.getString('tmpId') ??
+        _randomIdentifier();
+  }
+
+  Future<RunResult> _handleRunError(RunOptions options, Object error) async {
+    switch (fallback) {
+      case FallbackStrategy.error:
+        throw error;
+      case FallbackStrategy.empty:
+        if (fallbackHandler != null) {
+          return fallbackHandler!(options, error);
+        }
+        return RunResult(
+          status: 0,
+          source: RunSource.fallback,
+          body: EmptyRunContent(),
+          metadata: {},
+          properties: {},
+          executionPath: [],
+          redirectionUrl: '',
+        );
+    }
   }
 
   // Private methods
