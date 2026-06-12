@@ -242,7 +242,11 @@ Uri _buildRunnerUrl(
     'rlvt-u': userId,
   };
   if (options.locale != null) params['locale'] = options.locale!;
-  if (options.params != null) params.addAll(options.params!);
+  if (options.params != null) {
+    final userParams = Map<String, String>.from(options.params!);
+    userParams.remove('rlvt-u');
+    params.addAll(userParams);
+  }
   return Uri.parse('$runnerUrl/${options.workflowId}/${options.entrypoint}')
       .replace(queryParameters: params);
 }
