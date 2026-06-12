@@ -11,6 +11,8 @@
 
 Analytics tracking **and** real-time personalisation for Flutter apps, powered by Reelevant.
 
+📖 **[Full documentation](https://docs.reelevant.com/platform-guide/omni-channels/mobile/sdk/flutter)**
+
 ## Install
 
 ```
