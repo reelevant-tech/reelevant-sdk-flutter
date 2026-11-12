@@ -5,7 +5,8 @@ name: Verify actions lockfile
 on:
   pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -15,9 +16,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      ACTIONS_LOCK_VERSION: v0.4.1
+      ACTIONS_LOCK_SHA256: 39deb2fe714dbf74b073d8245fc7f3d50cd0eee18d5c0900e9e849ae933ae17e
     steps:
       - uses: actions/checkout@v6.0.2
         with:
           persist-credentials: false
-      - run: gh extension install github/gh-actions-lock --pin v0.4.1
-      - run: gh actions-lock --verify
+      # Self-hosted runners have no gh CLI: run the extension binary directly, checked against a pinned digest
+      - name: Download gh-actions-lock
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/gh-actions-lock" "https://github.com/github/gh-actions-lock/releases/download/${ACTIONS_LOCK_VERSION}/linux-amd64"
+          echo "${ACTIONS_LOCK_SHA256}  $RUNNER_TEMP/gh-actions-lock" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/gh-actions-lock"
+      - run: '"$RUNNER_TEMP/gh-actions-lock" --verify'
