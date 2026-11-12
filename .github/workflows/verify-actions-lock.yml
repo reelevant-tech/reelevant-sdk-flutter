@@ -17,7 +17,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       ACTIONS_LOCK_VERSION: v0.4.1
-      ACTIONS_LOCK_SHA256: 39deb2fe714dbf74b073d8245fc7f3d50cd0eee18d5c0900e9e849ae933ae17e
     steps:
       - uses: actions/checkout@v6.0.2
         with:
@@ -25,7 +24,12 @@ jobs:
       # Self-hosted runners have no gh CLI: run the extension binary directly, checked against a pinned digest
       - name: Download gh-actions-lock
         run: |
-          curl -fsSL -o "$RUNNER_TEMP/gh-actions-lock" "https://github.com/github/gh-actions-lock/releases/download/${ACTIONS_LOCK_VERSION}/linux-amd64"
-          echo "${ACTIONS_LOCK_SHA256}  $RUNNER_TEMP/gh-actions-lock" | sha256sum -c -
+          case "$(uname -m)" in
+            x86_64) asset=linux-amd64 sha256=39deb2fe714dbf74b073d8245fc7f3d50cd0eee18d5c0900e9e849ae933ae17e ;;
+            aarch64|arm64) asset=linux-arm64 sha256=aee61c993da36a5f09be2c77e6e4a1a22542a1b30ded4996bf8301c15dcf2b39 ;;
+            *) echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
+          esac
+          curl -fsSL -o "$RUNNER_TEMP/gh-actions-lock" "https://github.com/github/gh-actions-lock/releases/download/${ACTIONS_LOCK_VERSION}/${asset}"
+          echo "${sha256}  $RUNNER_TEMP/gh-actions-lock" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/gh-actions-lock"
       - run: '"$RUNNER_TEMP/gh-actions-lock" --verify'
